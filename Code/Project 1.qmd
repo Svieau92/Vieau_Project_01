@@ -1,0 +1,94 @@
+---
+title: "Statistical Consulting - Project 1"
+format: html
+editor: visual
+---
+
+# **Project Description**
+
+This is part of the git/version control homework for Statistical Consulting. This is a sample .qmd that was created as part of the assignment.
+
+## **Description of Lead IQ data set**
+
+Lead is highly poisonous if ingested directly, and affects almost every organ in the body. In low, indirect doses, the primary biological effect of lead exposure is damage to the nervous system. The maximum safe level of lead exposure, however, is somewhat controversial.
+
+To investigate the relationship between low-level lead absorption and neurological function, a team of researchers led by the CDC investigated children between the ages of 3 and 15 in El Paso that lived various distances from a large, lead-emitting ore smelter. This data set contains a small portion of the data collected by the researchers. In particular, it should be noted that the primary comparison conducted by the researchers was between children with high lead levels and low lead levels, not between children who lived near and far from the smelter.
+
+**Dimensions**
+
+-   124 observations
+
+-   2 variables
+
+**Variables**
+
+-   Smelter: Did the subject live within 1 mile of the lead smelter? (Near, Far)
+
+-   IQ: The subject’s IQ score, as measured by the Wechsler Intelligence Scale for Children (WISC)
+
+**Data Source**
+
+The original study was published in Landrigan PJ, Baloh RW, Barthel WF, Whitworth RH, Staehling NW, and Rosenblum BF. (1975). Neuropsychological dysfunction in children with chronic low-level lead absorption. *The Lancet*, **305**: 708-712.
+
+Data is available in:
+
+Rosner B. (2006). *Fundamentals of Biostatistics (6th edition)*. Duxbury.
+
+## **Import Data**
+
+```{r, echo = FALSE, message = FALSE}
+# Import statements
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(kableExtra)
+library(table1)
+```
+
+First we import and visualize the dataset.
+
+```{r}
+data <- read.csv("C:/Users/sviea/Documents/Statistical Consulting/Project 1/Data Raw/lead-iq-01.csv")
+kable(head((data)), format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Question A
+Create a graph showing the IQ levels by location status
+
+```{r}
+# Create a boxplot of IQ by proximity to lead smelter
+ggplot(data, aes(x = Smelter, y = IQ)) + 
+  geom_boxplot() +
+  labs(title = "Boxplot of IQ by Proximity to Lead Smelter")
+```
+Whoa! That's a super super genious we have there in the far category, with an IQ of ~1000. Or an outlier. Let's investigate.
+
+```{r}
+# Arrange dataframe by IQ descending.
+data_sort <- data %>%
+  arrange(desc(IQ))
+
+# Pretty print
+kable(head(data_sort), format = "html") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+No one has an IQ of 999. Likely a data entering error.
+
+## Question B (and D)
+
+Create at least one nicely formatted table.
+
+We are going to create Table 1 containing the descriptive statistics for the data set
+
+```{r}
+# Create table 1
+table1 <- table1(~ IQ | Smelter, data = data, caption = "Descriptive Statistics", overall = c(left = "Total"))
+table1
+```
+
+## Question C
+
+This table shows us that there appears to be a large difference in the mean IQ between the far (106) and Near (89.2) groups. However, looking at the boxplot, we can see that we clearly have a mistaken data entry with one child having an IQ of 999.
+
