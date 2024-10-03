@@ -66,15 +66,25 @@ Whoa! That's a super super genious we have there in the far category, with an IQ
 
 ```{r}
 # Arrange dataframe by IQ descending.
-data_sort <- data %>%
+data <- data %>%
   arrange(desc(IQ))
 
 # Pretty print
-kable(head(data_sort), format = "html") %>%
+kable(head(data), format = "html") %>%
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
 ```
 
-No one has an IQ of 999. Likely a data entering error.
+No one has an IQ of 999. Likely a data entering error. Let's fix that and create the boxplot again.
+
+```{r}
+# Correct IQ of 999 to 99
+data[1, "IQ"] <- 99
+
+# Create a boxplot of IQ by proximity to lead smelter
+ggplot(data, aes(x = Smelter, y = IQ)) + 
+  geom_boxplot() +
+  labs(title = "Boxplot of IQ by Proximity to Lead Smelter")
+```
 
 ## Question B (and D)
 
@@ -90,5 +100,5 @@ table1
 
 ## Question C
 
-This table shows us that there appears to be a large difference in the mean IQ between the far (106) and Near (89.2) groups. However, looking at the boxplot, we can see that we clearly have a mistaken data entry with one child having an IQ of 999.
+Now that we have corrected that erroneous data entry, there does not appear to be a large difference in the mean IQ between the far (92.7) and Near (89.2) groups. At most it could be by 1-3 IQ points.
 
