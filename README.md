@@ -4,7 +4,7 @@ The subdirectories are:
 
 Background: Contains background information on the project
 
-Code: Where the code for the project will be contained.
+Code: Where the code (and markdown) for the project will be contained.
 
 Reports: Where the final reports will be contained
 
