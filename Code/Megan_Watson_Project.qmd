@@ -1,0 +1,52 @@
+---
+title: "Megan_Watson_Project"
+format: html
+editor: visual
+toc: true
+---
+
+# Introduction
+
+Add details about her project here
+
+# Data Preparation
+
+Let's begin by loading our libraries
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(naniar) # Used to visualize missing data
+library(kableExtra) # Used for pretty printing (kable_styling)
+library(table1) # Used to make Table 1
+library(tidyr) # Used for reshaping
+```
+
+Import the data set.
+
+```{r}
+data <- read_csv("C:/Users/sviea/Documents/Statistical Consulting/Project 1/Data Raw/MICUPT_Deidentify.csv")
+```
+
+And take a look at our data.
+
+```{r}
+glimpse(data)
+```
+
+It looks like everything is formatted correctly for the most part.
+
+Percents are coded as doubles.
+
+`Admit_MonthYear` is a string that we may have to process, e.g. "2011-08".
+
+## Missingness Checks
+
+```{r}
+gg_miss_var(data)
+```
+
+```{r}
+vis_miss(data)
+```
