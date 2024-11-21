@@ -1,0 +1,81 @@
+---
+title: "Untitled"
+format: html
+editor: visual
+---
+
+# Question
+
+A study is being designed to test the effectiveness of a new weight loss drug.  Subjects will be weighed before the drug is administered and again three weeks afterward.  The researcher wants the study to be sensitive enough to detect a weight loss of about 1 kg, and needs to know if the study is viable with 25 subjects. The only paper the investigators could find describing a similar study using a different weight loss program but also over three weeks writes “The 14 subjects lost an average of 1.8 kg (p=0.010)”. 
+
+Using only this information, this quiz walks through a draft of a message to the investigator with an opinion on whether the study is viable, providing an appropriate power estimate in the process. 
+
+## Email
+
+Hello,
+
+Assuming a similar two-sided one-sample (paired) t-test was performed in the other study, we can determine that the standard deviation in that study was about  [1.029]{.underline}. Let me know if you’d like the details on how I arrived at this figure.
+
+Assuming that our population has the same standard deviation, the same design, no dropouts, and a 5% significance level, your proposed study with 25 participants has     B   % power to detect a change of 1 kg. Therefore, your proposed study would be    C     to detect your anticipated effect of 1 kg.
+
+With 25 subjects, you would have 80% power to detect a difference of      D     kg. If you need to stick to a 1 kg detectible effect, then you’d want to recruit at least    E      subjects in order to have 80% power.
+
+A. 2.24
+
+B. 57.23
+
+C. Underpowered
+
+D. 1.31
+
+E. 42
+
+```{r}
+library(pwr)
+```
+
+```{r}
+
+# My code
+
+pwr.t.test(n = 25, d = 0.4464, sig.level = 0.05, power = NULL, type = "paired")
+
+# Parameters
+n <- 25          # Number of subjects
+sd <- 2.24       # Standard deviation from previous study
+alpha <- 0.05    # Significance level
+power <- 0.80    # Desired power
+
+# Calculate the effect size
+effect_size <- pwr.t.test(n = NULL, d = 0.4464, sig.level = alpha, power= .80, type = "paired")$d
+effect_size
+
+# Convert effect size to detectable difference
+detectable_difference <- effect_size * sd
+
+detectable_difference
+
+```
+
+# Do Over
+
+1\)
+
+```{r}
+library(pwr)
+```
+
+```{r}
+effect_size <- pwr.t.test(n = 25, d = 1, sig.level = 0.05, type = "paired")
+effect_size
+
+
+
+sd <- 2.24
+# Parameters
+n <- 25          # Number of subjects
+sd <- 0.922      # Standard deviation from previous study
+alpha <- 0.05    # Significance level
+power <- 0.80    # Desired power
+
+```

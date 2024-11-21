@@ -1,0 +1,79 @@
+---
+title: "animations for Megan watson"
+format: html
+editor: visual
+---
+
+# Bonus
+
+I just learned how to animate plots so I'll do that for practice and fun here
+
+```{r}
+library(splines)
+library(png)
+library(gganimate)
+library(gifski)
+# Summarize and plot the data
+data_ex |> 
+  group_by(Admit_MonthYear, PT_YESNO) |> 
+  summarise(avg_Unit_LOS = mean(Unit_LOS, na.rm = T)) |> 
+  filter(Admit_MonthYear > as.Date("2012-01-01")) |> 
+  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YESNO, group = PT_YESNO)) +
+  geom_line() +
+  theme_minimal() +
+  geom_rect(data = highlight_periods, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), 
+            inherit.aes = FALSE, fill = "lightblue", alpha = 0.2) +
+  labs(title = "Average MICU LOS over Time by Physical Therapy",
+       x = "Admit Date",
+       y = "Avg MICU LOS") +
+  transition_reveal(Admit_MonthYear)
+```
+
+```{r}
+# Plot the data
+ggplot(summary_data, aes(x = Admit_MonthYear, y = percentage)) +
+  geom_line() +
+  theme_minimal() +
+  geom_rect(data = highlight_periods, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), 
+            inherit.aes = FALSE, fill = "lightblue", alpha = 0.2) +
+  annotate("text", x = as.Date("2015-09-01"), y = Inf, 
+           label = "QI-Initiative", color = "skyblue2", size = 4, vjust = 1.5) +
+  labs(title = "Percentage of Admissions Receiving Physical Therapy",
+       x = "Admit Date",
+       y = "Percentage") +
+  transition_reveal(Admit_MonthYear)
+```
+
+```{r}
+# Summarize and plot the data
+data_ex |> 
+  group_by(Admit_MonthYear) |> 
+  summarise(avg_ADMIT_TO_TREAT = mean(`ADMIT TO TREAT`, na.rm = T)) |> 
+  ggplot(aes(x = Admit_MonthYear, y = avg_ADMIT_TO_TREAT)) +
+  geom_line() +
+  theme_minimal() +
+  geom_rect(data = highlight_periods, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), 
+            inherit.aes = FALSE, fill = "lightblue", alpha = 0.2) +
+  annotate("text", x = as.Date("2015-09-01"), y = Inf, 
+           label = "QI-Initiative", color = "skyblue2", size = 4, vjust = 1.5,) +
+  labs(title = "Time from Admit to Therapy over Time",
+       x = "Admit Date",
+       y = "Time from Admit to Therapy") +
+  transition_reveal(Admit_MonthYear)
+```
+
+```{r}
+# Summarize and plot the data
+# data_ex |> 
+#   group_by(Admit_MonthYear) |> 
+#   summarise(avg_pct_therapy = mean(`PERCENT OF DAYS WITH THERAPY VISITS`, na.rm = T)) |> 
+#   ggplot(aes(x = Admit_MonthYear, y = avg_pct_therapy)) +
+#   geom_line() +
+#   theme_minimal() +
+#   geom_rect(data = highlight_periods, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), 
+#             inherit.aes = FALSE, fill = "lightblue", alpha = 0.2) +
+#   labs(title = "Average Percentage of Days with Physical Therapy Over Time",
+#        x = "Admit Date",
+#        y = "Average Days with Physical Therapy (%)") +
+#   transition_reveal(Admit_MonthYear)
+```
