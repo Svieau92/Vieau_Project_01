@@ -147,6 +147,7 @@ library(dplyr)
 library(tidyverse)
 library(kableExtra)
 library(lmtest) # Used for likelihood ratio test
+library(car) # Used to get vifs
 ```
 
 Import the data set.
@@ -764,18 +765,18 @@ Let's create a dummy variable for whether patients received PT or not.
 ```{r}
 # Create variable for reception of PT
 data_ex <- data_ex |> 
-  mutate(PT_YESNO = ifelse(is.na(`AVG THERAPY LENGTH`), 1,
+  mutate(PT_YN = ifelse(is.na(`AVG THERAPY LENGTH`), 1,
                            ifelse(`AVG THERAPY LENGTH` == 0, 0, 1)))
 
 # Double check calculations
 data_ex |> 
-  select(`AVG THERAPY LENGTH`, `DAYS WITH THERAPY VISITS`, PT_YESNO) |> 
+  select(`AVG THERAPY LENGTH`, `DAYS WITH THERAPY VISITS`, PT_YN) |> 
   head() |> 
   pretty_print()
 
 # Convert to factor for better plotting later on
 data_ex <- data_ex |> 
-  mutate(PT_YESNO = as.factor(PT_YESNO))
+  mutate(PT_YN = as.factor(PT_YN))
 
 ```
 
@@ -1089,18 +1090,18 @@ label(data_ex$PERC_POST_ICU) <- "% Post MICU"
 label(data_ex$Age_Range) <- "Age Range"
 label(data_ex$Age_Quartile) <- "Age Quartile"
 label(data_ex$NON_ICU_LOS) <- "NON-ICU Length of Stay"
-label(data_ex$PT_YESNO) <- "Received PT"
+label(data_ex$PT_YN) <- "Received PT"
 label(data_ex$MV_YN) <- "Received Mechanical Ventilation"
 label(data_ex$initiative) <- "QI Initiative Time Period"
 
 # Changing labels for clearer output
 data_ex$SEX <- factor(data_ex$SEX, levels = c("F", "M"), labels = c("Female", "Male"))
-data_ex$PT_YESNO <- factor(data_ex$PT_YESNO, levels = c(0, 1), labels = c("No", "Yes"))
+data_ex$PT_YN <- factor(data_ex$PT_YN, levels = c(0, 1), labels = c("No", "Yes"))
 ```
 
 ```{r}
 # Create Table 1 stratified by QI initiative
-table1 <- table1(~ SEX + MV_Total + `HOSPITAL LOS` + `ADMIT TO CONSULT` + `CONSULT TO TREAT` + `ADMIT TO TREAT` + PT_VISITS + Unit_LOS + `DAYS WITH THERAPY VISITS` +  PT_VISITS_PERC + `AVG THERAPY LENGTH` + `MAX THERAPY LENGTH` + `MIN THERAPY LENGTH` +  DAYS_POST_MICU + PT_POST_MICU + PERC_POST_ICU + Age_Range + Age_Quartile + NON_ICU_LOS +  PT_YESNO + MV_YN | initiative, data = data_ex, caption = "Descriptive Statistics by QI-Initiative Time Period", overall = c(left="Total"))
+table1 <- table1(~ SEX + MV_Total + `HOSPITAL LOS` + `ADMIT TO CONSULT` + `CONSULT TO TREAT` + `ADMIT TO TREAT` + PT_VISITS + Unit_LOS + `DAYS WITH THERAPY VISITS` +  PT_VISITS_PERC + `AVG THERAPY LENGTH` + `MAX THERAPY LENGTH` + `MIN THERAPY LENGTH` +  DAYS_POST_MICU + PT_POST_MICU + PERC_POST_ICU + Age_Range + Age_Quartile + NON_ICU_LOS +  PT_YN + MV_YN | initiative, data = data_ex, caption = "Descriptive Statistics by QI-Initiative Time Period", overall = c(left="Total"))
 table1
 ```
 
@@ -1113,7 +1114,7 @@ Here we will remove variables we will not be using in the analysis as previously
 ```{r}
 # filter dataset for correlation matrix
 data_sub <- data_ex |> 
-  select(-`PROBLEM LIST DX CODES`, -`PROBLEM LIST DX NAMES`, -DISCH_DISP, -`DEPT BEFORE Unit`, -`DEPT AFTER Unit`, -`CONSULT TO TREAT`, -`ADMIT TO TREAT`, - ACTUAL_DAYS_POST_MICU_log, - ADMIT_TO_CONSULT_log, -TOTAL_THERAPY_VISITS_log, -PT_YESNO, -initiative)
+  select(-`PROBLEM LIST DX CODES`, -`PROBLEM LIST DX NAMES`, -DISCH_DISP, -`DEPT BEFORE Unit`, -`DEPT AFTER Unit`, -`CONSULT TO TREAT`, -`ADMIT TO TREAT`, - ACTUAL_DAYS_POST_MICU_log, - ADMIT_TO_CONSULT_log, -TOTAL_THERAPY_VISITS_log, -PT_YN, -initiative)
 
 data_sub <- data_sub[,1:22]
 
@@ -1810,21 +1811,23 @@ There were significant differences in wait time from admit to therapy based on t
 
 ## Goal 3: Increase Percentage of Admissions Receiving Physical Therapy {#Goal_3}
 
+::: panel-tabset
+
 ## Visualization
 
 ```{r}
 # Convert factor to numeric 
-data_ex$PT_YESNO <- as.numeric(data_ex$PT_YESNO)
-data_ex$PT_YESNO <- ifelse(data_ex$PT_YESNO == 1, 0, 1)
+data_ex$PT_YN <- as.numeric(data_ex$PT_YN)
+data_ex$PT_YN <- ifelse(data_ex$PT_YN == 1, 0, 1)
 
 # Summarize and calculate percentages
 summary_data <- data_ex |> 
-  group_by(Admit_MonthYear, PT_YESNO) |> 
+  group_by(Admit_MonthYear, PT_YN) |> 
   summarise(count = n()) |> 
   mutate(total_count = sum(count)) |> 
   ungroup() |> 
   mutate(percentage = (count / total_count) * 100) |> 
-  filter(PT_YESNO == 1)
+  filter(PT_YN == 1)
 
 # Plot the data
 ggplot(summary_data, aes(x = Admit_MonthYear, y = percentage)) +
@@ -1854,7 +1857,7 @@ For this model, we will perform a logistic regression to see if the likelihood o
 data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
 
 # Fit the logistic regression
-model_goal3 <- glm(`PT_YESNO` ~ initiative + Age_Range + Month, data = data_ex, family = binomial())
+model_goal3 <- glm(`PT_YN` ~ initiative + Age_Range + Month, data = data_ex, family = binomial())
 
 # Examine Model
 summary(model_goal3)
@@ -1872,7 +1875,7 @@ pretty_print(CIs)
 data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
 
 # Fit the logistic regression
-model_goal3 <- glm(`PT_YESNO` ~ initiative + Age_Range + Month, data = data_ex, family = binomial())
+model_goal3 <- glm(`PT_YN` ~ initiative + Age_Range + Month, data = data_ex, family = binomial())
 
 # Examine Model
 summary(model_goal3)
@@ -1914,6 +1917,11 @@ This is again evidence that older patients were receiving priority for PT.
 
 ::::
 
+```{r}
+exp(-0.6767663)
+```
+
+
 # Some Rough Plotting, will change
 
 ```{r}
@@ -1944,7 +1952,95 @@ plot(allEffects(model_goal1_nb),
 ```
 # Analysis: Primary Outcome Variables
 
-## MICU LOS
+## MICU Length of Stay {#MICU_LOS}
+
+The primary question A of the study was whether the QI-initiative successfully decreased the MICU length of stay.
+
+To assess this we will run a Poisson or Negative Binomial Regression model predicting `UNIT LOS`:
+
+$Log( E(MICU LOS | QI-Initiative_i ) ) = β_0 + β_1 * QI-Initiative_i + β2 *Covariates_i + ...$
+
+::: panel-tabset
+
+## Covariates
+
+#### Covariate Selection
+
+The variables that were found to be correlated with `MICU LOS` were:
+
+- `HOSPITAL_LOS`
+- `ADMIT.TO.CONSULT`
+- `PT_VISITS`
+- `DAYS.WITH.THERAPY.VISITS`
+- `AVERAGE THERAPY LENGTH`
+- `MAX THERAPY LENGTH`
+
+`AVERAGE THERAPY LENGTH` and `MAX THERAPY LENGTH` blank are just different ways of measuring the same variable, and thus only `AVERAGE THERAPY LENGTH` will be considered as a covariate because it is more relevant in the context of the study. `AVERAGE THERAPY LENGTH` is important to control for, because it gives us a final model demonstrating the impact of the QI-initiative time period, regardless of how long the therapy visits were for each patient.
+
+Similarly, `PT_VISITS` and `DAYS.WITH.THERAPY.VISITS` are essentially the same variable, and thus only `PT_VISITS` will be selected because it was used in the previous analyses and is therefore more relevant. `PT_VISITS` will be imporant to account for because it will provide us with a model that demonstrates significance of the QI-initiative, regardless of how many PT visits each patient received.
+
+`ADMIT TO CONSULT` will not be selected due to ~20% missinginess, and we do not want to exclude patients in this study that did not receive a consultation.
+
+`HOSPITAL_LOS` will not be include because it will be an outcome variable and will be analyzed in a separate model. Furthermore, `MICU LOS` is directly related to `HOSPITAL_LOS`, and I want to avoid redundant variables due to issues of collinearity (This would be akin to include BMI in a model predicting Height).
+
+`Age_Range` will be included to account for age and because it was a significant predictor in the previous 3 analyses.
+
+`Month` will be included because we want to control for potential seasonality.
+
+##### Interaction Terms
+
+Preliminary visualization demonstrates that there may be a `initiative*MV_YN*PT_YN` interaction. Where the initiative only decreased `MICU LOS` for patients who were mechanically ventilated and received physical therapy.
+
+```{r}
+# Custom labeller function 
+custom_labels <- as_labeller(c(`0` = "No Mechanical Ventilation", `1` = "Mechanical Ventilation"))
+
+# Summarize and plot the data
+data_ex |> 
+  group_by(Admit_MonthYear, MV_YN, PT_YN) |> 
+  summarise(avg_Unit_LOS = mean(Unit_LOS, na.rm = T)) |> 
+  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = as.factor(PT_YN))) +
+  geom_point() +
+  geom_smooth(method = "loess", se = F) +
+  theme_minimal() +
+  geom_rect(data = highlight_periods, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), 
+            inherit.aes = FALSE, fill = "lightblue", alpha = 0.2) +
+  labs(title = "Average MICU LOS over Time by Mechanical Ventilation",
+       x = "Admit Date",
+       y = "Avg MICU LOS",
+       color = "Received Physical Therapy") +
+  facet_wrap(~MV_YN, labeller = custom_labels)
+```
+
+Thus, interaction terms for both `initiative*MV_YN` and `initiative*PT_YN` will be included as well.
+
+### Final Covariates
+
+The final model will include the following potential covariates:
+
+- `PT_VISITS`
+- `AVERAGE THERAPY LENGTH`
+- `MV_YN`
+- `initiative*MV_YN`
+- `PT_YN`
+- `initiative*PT_YN`
+
+Inclusion of variables into the final model will be decided via BIC using backwards elimination.
+
+[Top of Tabset](#MICU_LOS)
+
+## Model Selection
+
+#### Check for Zero Inflation
+
+First we will consider if zero inflation is necessary for `UNIT_LOS`.
+
+```{r}
+# Plot histogram of MICU LOS
+hist(data_ex$Unit_LOS)
+```
+
+MICU LOS` is not zero inflated and thus we do not need to consider ZIF for our model.
 
 #### Check for Overdispersion
 
@@ -1956,51 +2052,674 @@ paste0("Mean = ", mean(data_ex$Unit_LOS, na.rm = T))
 paste0("Variance = ", var(data_ex$Unit_LOS, na.rm = T))
 ```
 
+Our variance is dramatically higher than the mean, and thus we have overdispersion and the negative binomial model is more appropriate than the Poisson regression.
+
+#### Full Model
+
+We will first begin with a saturated model of all potential covariates.
+
 ```{r}
 # Change reference level
 data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
 
 # Fit a Negative Binomial model
-model_MICU1 <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + MV_YN + initiative*MV_YN, data = data_ex)
+model_full <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + MV_YN + initiative*MV_YN + PT_YN + initiative*PT_YN, data = data_ex)
 
 # Examine Model
-summary(model_MICU1)
+summary(model_full)
+
+# Examine multicollinearity
+vif(model_full, type = 'predictor')
+```
+
+This provides a highly significant model, where the impact of the QI-initiative depends on both whether a patient was mechanically ventilated AND whether they received PT or not.
+
+However, there are issues of multicollinearity for the `initiative*PT_YN` interaction term (GVIF = 36.93). Thus, the `initiative*PT_YN` interaction term will be dropped from further analysis to account for multicollinearity (and to make the model simpler to interpret/more parsimonious).
+
+#### Backwards Elimination
+
+We will be forcing in the inclusion of `Age_Range`, since we saw in our previous models that it is a significant predictor of the outcome variables (and also because it makes sense that older people will stay in the MICU longer, and this just seems like something people would ask if we controlled for).
+
+Similarly, `Month` will be included to account for the seasonality we have seen in previous models and in our plots.
+
+```{r}
+# Import the vif function from the MASS package 
+library(MASS)
+
+# Get cleaned data set with missing values omitted because this is necessary with the MASS package
+data_ex_clean <- data_ex |> 
+  dplyr::select(Unit_LOS, initiative, Age_Range, Month, PT_VISITS, `AVG THERAPY LENGTH`, MV_YN, PT_YN)
+
+# Remove rows with missing values
+data_ex_clean <- na.omit(data_ex_clean)
+
+# Fit a Negative Binomial model
+model_MICU1 <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + MV_YN + initiative*MV_YN + PT_YN, data = data_ex_clean)
+
+# Set n to the number of observations in the dataset
+n <- nrow(data_ex_clean)
+
+# Define the scope to force the inclusion of specific variables
+scope <- list(lower = ~ initiative + Month + Age_Range, upper = formula(model_MICU1))
+
+# Perform backwards elimination using BIC
+backwards_model_MICU_bic <- stepAIC(model_MICU1, direction = "backward", k = log(n), scope = scope)
+
+# Summary of the final model
+summary(backwards_model_MICU_bic)
+
+# Get VIFS
+vif(backwards_model_MICU_bic)
+```
+The resulting model omits only `AVG THERAPY LENGTH`. There are no issues with multicollinearity.
+
+This will be selected as the final model.
+
+[Top of Tabset](#MICU_LOS)
+
+## Analysis
+
+```{r}
+# Change MV_YN to a factor so I can change levels
+data_ex$MV_YN <- factor(data_ex$MV_YN)
+
+# Change reference level
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+# Change reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "0")
+
+# Fit a Negative Binomial model
+model_MICU <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
+
+# Examine Model
+summary(model_MICU)
+
+# Examine multicollinearity
+vif(model_MICU, type = 'predictor')
+
+# Get 95% CIs
+pretty_print(confint(model_MICU))
+```
+
+#### Change Reference Level to During and Non-Mechanical Ventilation
+
+```{r}
+# Change MV_YN to a factor so I can change levels
+data_ex$MV_YN <- factor(data_ex$MV_YN)
 
 # Change reference level
 data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
 
+# Change reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "0")
+
 # Fit a Negative Binomial model
-model_MICU1 <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + MV_YN + PT_YESNO + initiative*MV_YN + initiative*PT_YESNO, data = data_ex)
+model_MICU <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
 
 # Examine Model
-summary(model_MICU1)
+summary(model_MICU)
 
-# Perform the Poisson regression
-model_MICU2 <- glm(Unit_LOS ~ initiative + Age_Range + Month, data = data_ex, family = poisson())
+# Examine multicollinearity
+vif(model_MICU, type = 'predictor')
 
-# Examine Model
-summary(model_MICU2)
-
-```
-```{r}
-exp(0.672813)
+# Get 95% CIs
+pretty_print(confint(model_MICU))
 ```
 
-## MV Time
+#### Change Reference Level to Pre and Mechanical Ventilation
 
 ```{r}
 # Change reference level
 data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
 
+# Change reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "1")
+
 # Fit a Negative Binomial model
-model_MV1 <- glm.nb(MV_Total ~ initiative + Age_Range + Month + PT_YESNO + initiative*PT_YESNO, data = data_ex)
+model_MICU <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
 
 # Examine Model
-summary(model_MV1)
+summary(model_MICU)
+
+# Examine multicollinearity
+vif(model_MICU, type = 'predictor')
+
+# Get 95% CIs
+pretty_print(confint(model_MICU))
 ```
+
+#### Change Reference Level to During and Mechanical Ventilation
+
 ```{r}
-exp(0.111790)
+# Change reference level
+data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
+
+# Change reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "1")
+
+# Fit a Negative Binomial model
+model_MICU <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
+
+# Examine Model
+summary(model_MICU)
+
+# Examine multicollinearity
+vif(model_MICU, type = 'predictor')
+
+# Get 95% CIs
+pretty_print(confint(model_MICU))
 ```
+
+#### Change Reference Level to Post and Non Mechanical Ventilation
+
+```{r}
+# Change reference level
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Post")
+
+# Change reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "0")
+
+# Fit a Negative Binomial model
+model_MICU <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
+
+# Examine Model
+summary(model_MICU)
+
+# Examine multicollinearity
+vif(model_MICU, type = 'predictor')
+
+# Get 95% CIs
+pretty_print(confint(model_MICU))
+```
+
+[Top of Tabset](#MICU_LOS)
+
+## Interpretation
+
+### QI-Initiative
+
+QI-initiative time period was a significant predictor of MICU length of stay, while controlling for age, admission month, reception of physical therapy, and the number of physical therapy visits. The relationship between QI-initiative and MICU length of stay depended on mechanical ventilation status.
+
+##### QI-Initiative for Non Mechanical Ventilation
+
+For those who were not mechanically ventilated, patients admitted in the During period had a mean MICU length of stay that was 0.72 times that of patients admitted in the Pre period (z = -10.54, 95% CI: [0.68,0.76], p < 0.0001), and patients admitted in the Post period had a mean MICU length stay that was 0.78 times that of patients admitted in the Pre time period (z = -12.49, 95% CI: [0.75, 0.81], p < 0.0001). Those in the Post period had a mean MICU length of stay that was 1.09 times higher than patients during the During period (z = 2.78, 95% CI: [1.03,1.16], p = 0.00551).
+
+##### QI-Initiative for Mechanical Ventilation
+
+For those who were mechanically ventilated, patients admitted in the During period had a mean MICU length of stay that was 0.57 times that of patients admitted in the Pre period (z = -17.55, 95% CI: [0.54,0.61], p < 0.0001), and patients admitted in the Post period had a mean MICU length stay that was 0.68 times that of patients admitted in the Pre time period (z = -20.14, 95% CI: [0.65, 0.35], p < 0.0001). Those in the Post period had a mean MICU length of stay that was 1.18 times higher than patients during the During period (z = 5.60, 95% CI: [1.12,1.25], p < 0.0001 ).
+
+### Mechanical Ventilation
+
+Mechanical ventilation was a significant predictor of MICU length of stay, while controlling for age, admission month, reception of physical therapy, and the number of physical therapy visits. The relationship between Mechanical Ventilation and MICU length of stay differed based on the QI-initiative time period.
+
+##### Mechanical Ventilation in the Pre-Initiative Period
+For those in the Pre period, patients who were mechanically ventilated had a mean MICU length of stay that was 1.79 times greater than patients who were not mechanically ventilated (z = 31.451, 95% CI: [1.73, 1.86], p < 0.0001).
+
+##### Mechanical Ventilation in the During-Initiative Period
+For those in the During period, patients who were mechanically ventilated had a mean MICU length of stay that was 1.43 times greater than patients who were not mechanically ventilated (z = 9.141, 95% CI: [1.32, 1.54], p < 0.0001).
+
+##### Mechanical Ventilation in the Post-Initiative Period
+For those in the Post period, patients who were mechanically ventilated had a mean MICU length of stay that was 1.55 times greater than patients who were not mechanically ventilated (z = 23.09, 95% CI: [1.49, 1.61], p < 0.0001).
+
+#### Additional Interaction Comparisons
+There are additional comparisons we can make in the interaction between initiative and mechanical ventilation, but they pose little clinical relevance and will thus not be examined further (e.g. no mechanical ventilation and Pre period vs mechanical ventilation and Post period).
+
+### Age Range
+
+When accounting for multiple pairwise comparisons, age range is not a significant predictor of MICU length of stay while controlling for the other variables in the model (all p's > 0.05).
+
+### Admission Month
+
+When accounting for multiple pairwise comparisons, admission month is not a significant predictor of MICU length of stay while controlling for the other variables in the model (all p's > 0.05).
+
+### Physical Therapy
+Reception of physical therapy was a signicant predictor of MICU length of stay, when controlling for the other variables in the model. Patients who received physical therapy had a mean MICU length of stay that was 1.09 times greater than those who did not receive physical therapy (z = 5.40, 95% CI: [1.05, 1.12], p = < 0.0001).
+
+### Physical Therapy Visits
+Number of physical therapy visits was a significant predictor of MICU length of stay, when controlling for the other variables in the model. On average, each 1 visit increase was associated with a 1.14 times increase in MICU length of stay (z = 44.23, 95% CI: [1.13,1.15], p < 0.0001).
+
+[Top of Tabset](#MICU_LOS)
+
+## Visualization
+
+```{r}
+library(interactions)
+
+# Change levels for optimal plot
+data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
+
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+# Fit a Negative Binomial model
+model_MICU <- glm.nb(Unit_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
+
+# Use interactions package to plot interaction
+cat_plot(
+  model_MICU, 
+  pred = initiative, 
+  modx = MV_YN, 
+  geom = "line", 
+  colors = "Pastel2",
+  x.label = "QI-Initiative Time Period",
+  y.label = "Predicted MICU Length of Stay",
+  main.title = "MICU Length of Stay by QI-Initiative Time Period and Mechanical Ventilation")
+```
+
+#### Trying to recreate the interactions package plot
+
+```{r}
+
+data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
+
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+
+### this is from chat gpt
+
+# Create a new data frame for predictions
+new_data <- data_ex %>%
+  expand.grid(
+    initiative = unique(data_ex$initiative),
+    MV_YN = unique(data_ex$MV_YN),
+    Age_Range = unique(data_ex$Age_Range),
+    Month = unique(data_ex$Month),
+    PT_VISITS = mean(data_ex$PT_VISITS, na.rm = TRUE),
+    PT_YN = unique(data_ex$PT_YN)
+  )
+
+# Predict using the model
+new_data$predicted_LOS <- predict(model_MICU, newdata = new_data, type = "response")
+
+# Create the plot using ggplot2
+new_data |> 
+  group_by(initiative, MV_YN) |>
+  summarise(avg_LOS = mean(predicted_LOS, na.rm = T)) |> 
+  ggplot(aes(x = initiative, y = avg_LOS, fill = as.factor(MV_YN))) +
+  geom_col(size = 3, position = position_dodge()) +
+  scale_color_brewer(palette = "Pastel2", name = "Mechanical Ventilation") +
+  labs(
+    title = "MICU Length of Stay by QI-Initiative Time Period and Mechanical Ventilation",
+    x = "QI-Initiative Time Period",
+    y = "Predicted MICU Length of Stay"
+  ) +
+  theme_minimal()
+
+## Plotting the differences as a barplot
+new_data_summ <- new_data|> 
+  group_by(initiative, MV_YN) |>
+  summarise(avg_LOS = mean(predicted_LOS, na.rm = T)) |> 
+  ungroup() |> 
+  spread(MV_YN, avg_LOS) |> 
+  mutate(diff_LOS = `1` - `0`) |> 
+  dplyr::select(initiative, diff_LOS) 
+
+# Get the differences
+pretty_print(new_data_summ)
+  
+# Plot the differences
+ggplot(new_data_summ, aes(x = initiative, y = diff_LOS)) +
+  geom_col(size = 3, position = position_dodge()) +
+  scale_color_brewer(palette = "Pastel2", name = "Mechanical Ventilation") +
+  labs(
+    title = "Differences in MICU Length of Stay between Mechanical Ventilation and Non MV",
+    x = "QI-Initiative Time Period",
+    y = "Predicted MICU Length of Stay") +
+  theme_minimal()
+
+# Create the plot using ggplot2
+new_data |> 
+  group_by(initiative, MV_YN) |>
+  summarise(avg_LOS = mean(predicted_LOS, na.rm = T)) |> 
+  ggplot(aes(x = initiative, y = avg_LOS, fill = as.factor(MV_YN))) +
+  geom_col(size = 3, position = position_dodge()) +
+  scale_color_brewer(palette = "Pastel2", name = "Mechanical Ventilation") +
+  labs(
+    title = "MICU Length of Stay by QI-Initiative Time Period and Mechanical Ventilation",
+    x = "QI-Initiative Time Period",
+    y = "Predicted MICU Length of Stay"
+  ) +
+  theme_minimal()
+
+```
+
+
+[Top of Tabset](#MICU_LOS)
+
+## Summary
+
+There was a significant interaction between QI-initiative time period and mechanical ventilation on MICU length of stay, when controlling for age, admission month, reception of physical therapy, and number of physical therapy visits.
+
+#### Mechanical Ventilation
+
+Across the board, patients who were mechanically ventilated had a longer average MICU length of stay than those were not, regardless of QI-initiative time period.
+
+#### QI-Initiative Time Period
+
+The QI-initiative was successful at reducing the MICU length of stay for both patients that were mechanically ventilated and those who were not.  
+
+Moreover, the difference in MICU length of stay between patients who were mechanically ventilated and those who were not decreased in the During and Post periods compared to the Pre period. On average, those were mechanically ventilated in the Pre period had a predicted MICU length of stay that was 86.39 hours more than those were not, compared to only 33.69 hours in the During period, and 47.02 hours in the Post period.
+
+In other words, the QI-initiative decreased the average MICU length of stay by at least 48 hours for those who were mechanically ventilated!
+
+[Top of Tabset](#MICU_LOS)
+
+:::
+
+## MV Time {#MV}
+
+Primary question B of the study was whether the QI-initiative successfully decreased the total mechanical ventilation time.
+
+To assess this we will run a Poisson or Negative Binomial Regression model predicting UNIT LOS:
+
+$Log( E(MV Total | QI-Initiative_i ) ) = β_0 + β_1 * QI-Initiative_i + β2 *Covariates_i + ...$
+
+::: panel-tabset
+
+## Covariates
+
+The same variables that were potential covariates for primary question A will be selected for this model. These are:
+
+PT_VISITS
+AVERAGE THERAPY LENGTH
+MV_YN
+initiative*MV_YN
+PT_YN
+initiative*PT_YN
+
+Additionally, since patients that were not mechanically ventilated have a `MV_Total` time of `NA`, an interaction term using `MV_YN` cannot be used, and thus will be dropped from consideration in this model.
+
+[Top of Tabset](#MV)
+
+## Model Selection
+
+#### Check for Zero Inflation
+
+```{r}
+# Check if MV Total is zero inflated
+min(data_ex$MV_Total, na.rm = T)
+```
+
+`MV_Total` does not have any values of 0, and thus cannot be zero inflated.
+
+#### Check for Overdispersion
+
+```{r}
+# Compare mean and variance
+paste0("Mean = ", mean(data_ex$MV_Total, na.rm = T))
+
+# Compare mean and variance
+paste0("Variance = ", var(data_ex$MV_Total, na.rm = T))
+```
+The variance is higher than the mean, and thus we have overdisperion and will use a negative binomial regression.
+
+#### Full Model
+
+We will first begin with a saturated model of all potential covariates.
+
+```{r}
+# Change reference level
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+# Change reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "0")
+
+# Fit a Negative Binomial model
+model_full <- glm.nb(MV_Total ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + PT_YN + initiative*PT_YN, data = data_ex)
+
+# Examine Model
+summary(model_full)
+
+# Examine multicollinearity
+vif(model_full, type = 'predictor')
+```
+We have multicollinearity on the `initiative*PT_YN` interaction again. We will remove this interaction.
+
+#### Backwards Elimination
+
+```{r}
+# Get cleaned data set with missing values omitted because this is necessary with the MASS package
+data_ex_clean <- data_ex |> 
+  dplyr::select(MV_Total, initiative, Age_Range, Month, PT_VISITS, `AVG THERAPY LENGTH`, PT_YN)
+
+# Remove rows with missing values
+data_ex_clean <- na.omit(data_ex_clean)
+
+# Fit a Negative Binomial model
+model_MV <- glm.nb(MV_Total ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + PT_YN, data = data_ex_clean)
+
+# Set n to the number of observations in the dataset
+n <- nrow(data_ex_clean)
+
+scope
+# Define the scope to force the inclusion of specific variables
+scope <- list(lower = MV_Total ~ initiative + Month + Age_Range, upper = formula(model_MV))
+
+# Perform backwards elimination using BIC
+backwards_model_MV_bic <- stepAIC(model_MV, direction = "backward", k = log(n), scope = scope)
+
+# Examine selected model
+summary(backwards_model_MV_bic)
+```
+
+Backwards elimination includes all variables, and thus this will be selected as the final model.
+
+[Top of Tabset](#MV)
+
+## Analysis
+
+```{r}
+# Change the reference level
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+# Change the reference level
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "0")
+
+# Fit the negative binomial regression
+model_MV <- glm.nb(MV_Total ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + PT_YN, data = data_ex)
+
+# Examine model
+summary(model_MV)
+
+# Get 95% CIs
+pretty_print(confint(model_MV))
+```
+
+#### Change Reference Category to During 
+
+```{r}
+# Change the reference level
+data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
+
+# Fit the negative binomial regression
+model_MV <- glm.nb(MV_Total ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + PT_YN, data = data_ex)
+
+# Examine model
+summary(model_MV)
+
+# Get 95% CIs
+pretty_print(confint(model_MV))
+```
+
+[Top of Tabset](#MV)
+
+## Interpretation
+
+### Main Effects
+QI-initiative time period is a significant predictor for mechanical ventilation time, while controlling for age, admission month, total physical therapy visits, and average physical therapy visit length. Compared to patients in the Pre time period, patients in the During time period had a mean mechanical ventilation time that was 0.66 that of those in the Pre period (z = -9.12, 95% CI: [0.60, 0.72], p < 0.0001), and patients in the Post time period had a mean mechanical ventilation time that was 0.78 that of those in the pre period (z = -9.08, 95% CI: [0.74,0.82], p < 0.0001). Additionally, compared to patients in the During time period, those in the Post time period had a mean mechanical ventilation time that was 1.18 that of those in the During period (z = 3.92, 95% CI: [1.09, 1.29], p < 0.0001).
+
+### Age
+Age was not a significant predictor in this model (all p’s  > 0.5), but was included in the final model to control for it.
+
+### Month
+
+Admission Month was a significant predictor for mechanical ventilation time, while controlling for QI-initiative time period, age, total PT visits, and average PT visit length. For instance, those admitted during March had an average mechanical ventilation time that was 0.88 times that of those admitted during January z = -2.294, 95% CI: [0.79,0.98], p = 0.022).
+
+Since possible comparisons between months are myriad (12!), and the goal of this project was not to compare outcome variables between months (merely to control for these differences due to seasonality), further comparisons will not be made.
+
+### Reception of Physical Therapy
+Reception of physical therapy was a signicant predictor of mechanical ventilation time, when controlling for the other variables in the model. Patients who received physical therapy had a mean mechanical ventilation time that was 1.15 times greater than those who did not receive physical therapy (z = 2.95, 95% CI: [1.11, 1.13], p = 0.003).
+
+### Total Physical Therapy Visits
+Number of physical therapy visits was a significant predictor of mechanical ventilation time, when controlling for the other variables in the model. On average, each 1 visit increase was associated with a 1.12 times increase in mechanical ventilation time (z = 25.13, 95% CI: [1.11,1.13], p < 0.0001).
+
+### Average Physical Therapy Length
+Average physical therapy length was a significant predictor of mechanical ventilation time, when controlling for the other variables in the model. On average, each 1 hour increase in physical therapy visit length was associated with a 0.4% decrease in mechanical ventilation time (z = -3.37, 95% CI: [0.994, 0.998], p < 0.0001).
+
+[Top of Tabset](#MV)
+
+## Visualization (COME BACK TO THIS)
+
+```{r}
+# Create new data set
+data_ex_MV <- data_ex |> 
+  dplyr::select(MV_Total, initiative, PT_YN, `AVG THERAPY LENGTH`, PT_VISITS, Month, Age_Range) 
+data_ex_MV <- na.omit(data_ex_MV)
+
+# Relevel for proper plot
+data_ex_MV$initiative <- relevel(data_ex_MV$initiative, ref = "Pre")
+
+# Rerun model
+model_MV <- glm.nb(MV_Total ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + PT_YN, data = data_ex_MV)
+
+# Get predicted values
+data_ex_MV$MV_pred <- predict(model_MV)
+
+# Plot the model
+ggplot(data_ex_MV, aes(x = initiative, y = log(MV_pred), color = initiative)) +
+  geom_boxplot()
+```
+
+[Top of Tabset](#MV)
+
+## Summary
+
+QI-initiative time period is a significant predictor for mechanical ventilation time, while controlling for age, admission month, total physical therapy visits, and average physical therapy visit length. Compared to patients in the Pre time period, patients in the During time period had a mean mechanical ventilation time that was 0.66 that of those in the Pre period (p < 0.0001), and patients in the Post time period had a mean mechanical ventilation time that was 0.78 that of those in the pre period (p < 0.0001).
+
+Additionally, there was a slight decrease in the impact of the the QI-initiative. Compared to patients in the During time period, those in the Post time period had a mean mechanical ventilation time that was 1.18 that of those in the During period (p < 0.0001).
+
+[Top of Tabset](#MV)
+
+:::
+
+## Non ICU Length of Stay
+
+## Covariates
+
+## Model Selection
+
+#### Check for Zero Inflation
+
+```{r}
+# Check for zero inflation
+hist(data_ex$NON_ICU_LOS)
+```
+
+#### Check for Overdispersion
+
+```{r}
+# Compare mean and variance
+paste0("Mean = ", mean(data_ex$NON_ICU_LOS, na.rm = T))
+
+# Compare mean and variance
+paste0("Variance = ", var(data_ex$NON_ICU_LOS, na.rm = T))
+```
+
+#### Saturated Model
+
+```{r}
+# Relevel 
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+# Fit the zero-inflated negative binomial
+model_NON <- zeroinfl(NON_ICU_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN| initiative, data = data_ex, dist = "negbin")
+
+# Examine Model
+summary(model_NON)
+
+# Fit the  negative binomial
+model_NON_nb <- glm.nb(NON_ICU_LOS ~ initiative + Age_Range + Month + PT_VISITS + MV_YN + initiative*MV_YN + PT_YN, data = data_ex)
+
+# Examine Model
+summary(model_NON_nb)
+
+AIC(model_NON)
+AIC(model_NON_nb)
+```
+
+#### Backwards Elimination
+
+```{r}
+# Define the scope to force the inclusion of specific variables
+scope <- list(lower = ~ initiative + Month + Age_Range, upper = formula(model_NON_nb))
+
+# Perform backwards elimination using BIC
+backwards_model_NON_bic <- stepAIC(model_NON_nb, direction = "backward", k = log(n), scope = scope)
+
+# Examine final model
+summary(backwards_model_NON_bic)
+```
+
+## Analysis
+
+```{r}
+# Run the model
+model_NON <- glm.nb(NON_ICU_LOS ~ initiative + Age_Range + Month + PT_VISITS + PT_YN, data = data_ex, link = log)
+
+# Examine Model
+summary(model_NON)
+```
+
+
+## Total Hospital Length of Stay
+
+## Covariates
+
+## Model Selection
+
+#### Check for Zero Inflation
+
+```{r}
+# Check for Zeros
+min(data_ex$`HOSPITAL LOS`)
+```
+
+Nope. You can't have a 0 minute hospital length of stay
+
+#### Check for Overdispersion
+
+```{r}
+# Compare mean and variance
+paste0("Mean = ", mean(data_ex$`HOSPITAL LOS`, na.rm = T))
+
+# Compare mean and variance
+paste0("Variance = ", var(data_ex$`HOSPITAL LOS`, na.rm = T))
+```
+Yup.
+
+#### Backwards Elimination
+
+```{r}
+# Define the scope to force the inclusion of specific variables
+scope <- list(lower = ~ initiative + Month + Age_Range, upper = formula(model_MICU1))
+
+# Perform backwards elimination using BIC
+backwards_model_tot_bic <- stepAIC(model_NON_nb, direction = "backward", k = log(n), scope = scope)
+
+# Examine final model
+summary(backwards_model_tot_bic)
+```
+
+## Analysis
+
+```{r}
+# Run the model
+model_tot <- glm.nb(`HOSPITAL LOS` ~ initiative + Age_Range + Month + PT_VISITS + PT_YN, data = data_ex, link = log)
+
+# Examine Model
+summary(model_tot)
+```
+
 
 
 # Plotting
@@ -2058,9 +2777,9 @@ I am also including those that did not receive PT here, so that would explain th
 #| warning: false
 # Summarize and plot the data
 data_ex |> 
-  group_by(Admit_MonthYear, MV_YN, PT_YESNO) |> 
+  group_by(Admit_MonthYear, MV_YN, PT_YN) |> 
   summarise(avg_Unit_LOS = mean(Unit_LOS, na.rm = T)) |> 
-  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YESNO)) +
+  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YN)) +
   geom_point() +
   geom_smooth(method = "loess", se = F) +
   theme_minimal() +
@@ -2081,14 +2800,14 @@ For those not on MV, the PT did not seem to change their average LOS.
 ```{r}
 # Make it a factor for better plotting
 data_ex <- data_ex |> 
-  mutate(PT_YESNO = as.factor(PT_YESNO))
+  mutate(PT_YN = as.factor(PT_YN))
 
 # Summarize and plot the data
 data_ex |> 
-  group_by(Admit_MonthYear, PT_YESNO) |> 
+  group_by(Admit_MonthYear, PT_YN) |> 
   summarise(avg_Unit_LOS = mean(Unit_LOS, na.rm = T)) |> 
   filter(Admit_MonthYear > as.Date("2012-01-01")) |> 
-  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YESNO, group = PT_YESNO)) +
+  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YN, group = PT_YN)) +
   geom_line() +
   theme_minimal() +
   geom_rect(data = highlight_periods, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), 
@@ -2101,10 +2820,10 @@ data_ex |>
 ```{r}
 # Summarize and plot the data
 data_ex |> 
-  group_by(Admit_MonthYear, PT_YESNO) |> 
+  group_by(Admit_MonthYear, PT_YN) |> 
   summarise(avg_Unit_LOS = mean(Unit_LOS, na.rm = T)) |> 
   filter(Admit_MonthYear > as.Date("2012-01-01")) |> 
-  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YESNO, group = PT_YESNO)) +
+  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YN, group = PT_YN)) +
   geom_point() +
   geom_smooth(method = "loess", se = F) +
   theme_minimal() +
@@ -2127,10 +2846,10 @@ But overall it looks like the QI may have successfuly decreased MICU LOS.
 library(splines)
 # Summarize and plot the data
 data_ex |> 
-  group_by(Admit_MonthYear, PT_YESNO) |> 
+  group_by(Admit_MonthYear, PT_YN) |> 
   summarise(avg_Unit_LOS = mean(Unit_LOS, na.rm = T)) |> 
   filter(Admit_MonthYear > as.Date("2012-01-01")) |> 
-  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YESNO, group = PT_YESNO)) +
+  ggplot(aes(x = Admit_MonthYear, y = avg_Unit_LOS, color = PT_YN, group = PT_YN)) +
   geom_point() +
   geom_smooth(method = "lm", formula = y ~ ns(x, df = 4), se = F) +
   theme_minimal() +
@@ -2143,6 +2862,7 @@ data_ex |>
 
 :::
 
+
 #### Some Graphing
 
 ```{r}
@@ -2150,7 +2870,7 @@ data_ex <- data_ex |>
   mutate(initiative = as.factor(initiative)) |> 
   mutate(initiative = relevel(initiative, ref = "Pre"))
 
-ggplot(data_ex, aes(x = PT_YESNO, y = Unit_LOS_log, fill = initiative)) +
+ggplot(data_ex, aes(x = PT_YN, y = Unit_LOS_log, fill = initiative)) +
   geom_boxplot() +
   theme_minimal() +
   scale_fill_brewer(palette = "Pastel2")
@@ -2160,7 +2880,7 @@ This shows that MICU LOS decreased in the during and post QI initiative periods 
 
 ```{r}
 data_ex |> 
-  filter(PT_YESNO == 1) |> 
+  filter(PT_YN == 1) |> 
   ggplot(aes(x = initiative, y = Unit_LOS_log, fill = initiative)) +
   geom_boxplot() +
   theme_minimal() +
@@ -2169,7 +2889,7 @@ data_ex |>
 
 ```{r}
 data_ex |> 
-  filter(PT_YESNO == 1) |> 
+  filter(PT_YN == 1) |> 
   ggplot(aes(x = initiative, y = Unit_LOS_log, fill = initiative)) +
   geom_boxplot() +
   theme_minimal() +
@@ -2183,7 +2903,7 @@ In other words, you HAVE to filter based on PT
 #### MV Total
 
 ```{r}
-ggplot(data_ex, aes(x = PT_YESNO, y = MV_Total_log, fill = initiative)) +
+ggplot(data_ex, aes(x = PT_YN, y = MV_Total_log, fill = initiative)) +
   geom_boxplot() +
   theme_minimal() +
   scale_fill_brewer(palette = "Pastel2")
@@ -2292,7 +3012,7 @@ data_ex |>
 ```
 
 ```{r}
-ggplot(data_ex, aes(x = PT_YESNO, y = log(NON_ICU_LOS), fill = initiative)) +
+ggplot(data_ex, aes(x = PT_YN, y = log(NON_ICU_LOS), fill = initiative)) +
   geom_boxplot() +
   theme_minimal() +
   scale_fill_brewer(palette = "Pastel2") +
@@ -2302,7 +3022,7 @@ ggplot(data_ex, aes(x = PT_YESNO, y = log(NON_ICU_LOS), fill = initiative)) +
 ```
 
 ```{r}
-ggplot(data_ex, aes(x = PT_YESNO, y = log(`HOSPITAL LOS`), fill = initiative)) +
+ggplot(data_ex, aes(x = PT_YN, y = log(`HOSPITAL LOS`), fill = initiative)) +
   geom_boxplot() +
   theme_minimal() +
   scale_fill_brewer(palette = "Pastel2") +
