@@ -1105,6 +1105,19 @@ table1 <- table1(~ SEX + MV_Total + `HOSPITAL LOS` + `ADMIT TO CONSULT` + `CONSU
 table1
 ```
 
+```{r}
+# # Note: now that table 1 is complete we can set those patients with "negative age" to `NA`s.
+# 
+# # Set negative age to NA
+# data_ex <- data_ex |>  
+#   mutate(Age_Range = ifelse(Age_Range == "Missing", NA, Age_Range))
+# 
+# summary(data_ex$Age_Range)
+# data_exs$Age_Range
+# table(data_exs$Age_Range)
+# table(data_ex$Age_Range)
+```
+
 # Correlation Matrix
 
 #### Remove Variables
@@ -1440,7 +1453,33 @@ data_ex |>
        y = "Avg MICU LOS")
 ```
 
-It appears that we do have seasonailty in our main outcome variable, and will have to account for this in our final model.
+#### Predicting MICU Length of Stay
+
+```{r}
+# Run a simple regression predicting MICU LOS with admission month
+model <- lm(Unit_LOS ~ Month, data = data_ex)
+
+# Examine Model
+summary(model)
+```
+
+Admission month is a marginally significant predictor of the main outcome variable `Unit_LOS`.
+
+#### Predicting Mechanical Ventilation Time
+
+```{r}
+# Run a simple regression predicting MICU LOS with admission month
+model <- lm(MV_Total ~ Month, data = data_ex)
+
+# Examine Model
+summary(model)
+```
+
+Admission month is also a significant predictor of `MV_Total`.
+
+#### Seasonality Summary
+
+It appears that we do have seasonality in our main outcome variables, and will have to account for this in our final model!
 
 # Analysis: Main Goals {#Main_Goals}
 
@@ -2602,9 +2641,21 @@ Additionally, there was a slight decrease in the impact of the the QI-initiative
 
 :::
 
-## Non ICU Length of Stay
+# Analysis: Secondary Outcomes
+
+## Non ICU Length of Stay {#Non}
+
+Secondary Outcome of interest A is whether the QI-initiative decreased the Non-ICU length of stay.
+
+This will be a Poisson or Negative Binomial Regression similar to the primary analysis 
+
+::: panel-tabset
 
 ## Covariates
+
+The potential covariates for this analysis will be the same as the main analysis.
+
+[Top of Tabset](#Non)
 
 ## Model Selection
 
@@ -2614,6 +2665,8 @@ Additionally, there was a slight decrease in the impact of the the QI-initiative
 # Check for zero inflation
 hist(data_ex$NON_ICU_LOS)
 ```
+
+We appear to have zero inflation and will need to check if a zero inflated negative binomial model will improve performance over a simple negative binomial regression.
 
 #### Check for Overdispersion
 
@@ -2625,7 +2678,11 @@ paste0("Mean = ", mean(data_ex$NON_ICU_LOS, na.rm = T))
 paste0("Variance = ", var(data_ex$NON_ICU_LOS, na.rm = T))
 ```
 
-#### Saturated Model
+We have over dispersion and thus the negative binomial model is preferred over a Poisson regression.
+
+#### Test Zero Inflation Model Performance
+
+We will first fit the saturated model as both zero inflated negative binomial regression and a simple negative binomial model
 
 ```{r}
 # Relevel 
@@ -2643,9 +2700,28 @@ model_NON_nb <- glm.nb(NON_ICU_LOS ~ initiative + Age_Range + Month + PT_VISITS 
 # Examine Model
 summary(model_NON_nb)
 
-AIC(model_NON)
-AIC(model_NON_nb)
 ```
+
+And compare information criteria.
+
+```{r}
+# Compare model performance
+bic_nb <- BIC(model_NON_nb)
+bic_zifb <- BIC(model_NON)
+
+aic_nb <- AIC(model_NON_nb)
+aic_zifb <- AIC(model_NON)
+
+# Create a data frame to display the values 
+model_comparison <- data.frame(Model = c("Negative Binomial Model", "ZIF Negative Binomial Model"), 
+                               BIC = c(bic_nb, bic_zifb), 
+                               AIC = c(aic_nb, aic_zifb))
+
+# Print resulting table
+pretty_print(model_comparison)
+```
+
+AIC and BIC prefer the simple negative binomial model, and thus we do not have zero inflation!
 
 #### Backwards Elimination
 
@@ -2660,20 +2736,103 @@ backwards_model_NON_bic <- stepAIC(model_NON_nb, direction = "backward", k = log
 summary(backwards_model_NON_bic)
 ```
 
+The final model removes `AVG THERAPY LENGTH` and `MV_YN`, which makes sense, as if you didn't go to the ER, then you didn't require intensive therapy or mechanical ventilation.
+
+[Top of Tabset](#Non)
+
 ## Analysis
 
 ```{r}
+# Relevel 
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
 # Run the model
 model_NON <- glm.nb(NON_ICU_LOS ~ initiative + Age_Range + Month + PT_VISITS + PT_YN, data = data_ex, link = log)
 
 # Examine Model
 summary(model_NON)
+
+# Get 95% CIs
+pretty_print(confint(model_NON))
+```
+
+#### Change Reference Category to During
+
+```{r}
+# Relevel 
+data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
+
+# Run the model
+model_NON <- glm.nb(NON_ICU_LOS ~ initiative + Age_Range + Month + PT_VISITS + PT_YN, data = data_ex, link = log)
+
+# Examine Model
+summary(model_NON)
+
+# Get 95% CIs
+pretty_print(confint(model_NON))
+```
+
+[Top of Tabset](#Non)
+
+## Interpretation
+
+#### Main Effects
+QI-initiative time period is not a significant predictor for Non-ICU length of stay, while controlling for age, admission month, number of physical therapy visits, and reception of physical therapy. There was no difference in the mean Non-ICU length of stay between the Pre and During period (z = -0.84, 95% CI: [0.84, 1.07], p =  0.40), between the Pre and Post period (z = -1.51, 95% CI: [0.88, 1.02], p =   0.13), or between the During and Post periods (z = -0.093, 95% CI: [0.88, 1.12], p =   0.93). 
+
+#### Age 
+Age range was a significant predictor of non-ICU length of stay, while controlling for the other variables in the model. Specifically, patients who were 70+ had a mean non-ICU length of stay that was 0.76 that ofpatients who were 13-39 (z = -5.130, 95% CI: [0.68, 0.84], p < 0.0001). Other age comparisons were not significant (p > 0.05), and comparisons with baseline categories besides 13-39 were not conducted.
+
+#### Admission Month
+Admission Month was a significant predictor for non-ICU length of stay, while controlling for the other variables in the model. For instance, those admitted during May had an average mechanical ventilation time that was 0.78 times that of those admitted during January (z = -2.52, 95% CI: [0.69, 0.96], p =  0.01).
+
+Since possible comparisons between months are myriad (12!), and the goal of this project was not to compare outcome variables between months (merely to control for these differences due to seasonality), further comparisons were not made.
+
+#### Number of Physical Therapy Visits
+Number of physical therapy visits was a signifcant predictor of non-ICU length of stay. On average, every one visit increase was associated with a 1.08 times higher non-ICU length of stay (z = 9.63, 95% CI: [1.06,1.10], p < 0.0001).
+
+#### Reception of Physical Therapy
+Reception of physical therapy was a significant predictor of non-ICU length of stay. On average, patients who received physical therapy had a mean non-ICU length of stay that was 1.19 times higher than patients who did not (z = 4.08, 95% CI: [1.09,1.29], p < 0.0001).
+
+[Top of Tabset](#Non)
+
+## Visualization
+
+```{r}
+# Extract specific effect
+effect_initiative <- effect("initiative", model_NON)
+
+# Plot
+plot(effect_initiative)
+
+# Plot
+plot(effect("Age_Range", model_NON))
+
 ```
 
 
-## Total Hospital Length of Stay
+[Top of Tabset](#Non)
+
+## Summary
+
+We can conclude that the QI-initiative was not successful in reducing Non_ICU length of stay. Which makes sense, as physical therapy likely targets the patients in worse condition that could benefit from it compared to patients admitted for more benign injuries.
+
+[Top of Tabset](#Non)
+
+:::
+
+## Total Hospital Length of Stay {#Total_LOS}
+
+Secondary Outcome of interest B is whether the QI-initiative decreased the total hospital length of stay.
+
+This will be a Poisson or Negative Binomial Regression similar to the primary analysis .
+
+::: panel-tabset
 
 ## Covariates
+
+The potential covariates for this analysis are the same as the main analysis.
+
+[Top of Tabset](#Total_LOS)
 
 ## Model Selection
 
@@ -2684,7 +2843,7 @@ summary(model_NON)
 min(data_ex$`HOSPITAL LOS`)
 ```
 
-Nope. You can't have a 0 minute hospital length of stay
+You cannot have a 0 minute hospital length of stay, thus we do not need to consider zero inflation in our model.
 
 #### Check for Overdispersion
 
@@ -2695,32 +2854,119 @@ paste0("Mean = ", mean(data_ex$`HOSPITAL LOS`, na.rm = T))
 # Compare mean and variance
 paste0("Variance = ", var(data_ex$`HOSPITAL LOS`, na.rm = T))
 ```
-Yup.
+
+We have overdispersion, a negative binomial regression will be chosen.
 
 #### Backwards Elimination
 
 ```{r}
+# Relevel 
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
+# Get cleaned data set with missing values omitted because this is necessary with the MASS package
+data_ex_clean <- data_ex |> 
+  dplyr::select(`HOSPITAL LOS`, initiative, Age_Range, Month, PT_VISITS, `AVG THERAPY LENGTH`, MV_YN, PT_YN)
+
+# Remove rows with missing values
+data_ex_clean <- na.omit(data_ex_clean)
+
+# Run the model
+model_tot <- glm.nb(`HOSPITAL LOS` ~ initiative + Age_Range + Month + PT_VISITS + PT_YN + `AVG THERAPY LENGTH` + MV_YN + initiative*MV_YN, data = data_ex_clean, link = log)
+
 # Define the scope to force the inclusion of specific variables
-scope <- list(lower = ~ initiative + Month + Age_Range, upper = formula(model_MICU1))
+scope <- list(lower = ~ initiative + Month + Age_Range, upper = formula(model_tot))
 
 # Perform backwards elimination using BIC
-backwards_model_tot_bic <- stepAIC(model_NON_nb, direction = "backward", k = log(n), scope = scope)
+backwards_model_tot_bic <- stepAIC(model_tot, direction = "backward", k = log(n), scope = scope)
 
 # Examine final model
 summary(backwards_model_tot_bic)
 ```
 
+The final model drops `PT_YN` and the `initiative*MV_YN` interaction term.
+
+[Top of Tabset](#Total_LOS)
+
 ## Analysis
 
 ```{r}
+# Relevel 
+data_ex$initiative <- relevel(data_ex$initiative, ref = "Pre")
+
 # Run the model
-model_tot <- glm.nb(`HOSPITAL LOS` ~ initiative + Age_Range + Month + PT_VISITS + PT_YN, data = data_ex, link = log)
+model_tot <- glm.nb(`HOSPITAL LOS` ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + MV_YN, data = data_ex, link = log)
 
 # Examine Model
 summary(model_tot)
+
+# Get confidence intervals
+pretty_print(confint(model_tot))
+```
+
+#### Change Reference Level to During
+
+```{r}
+# Relevel 
+data_ex$initiative <- relevel(data_ex$initiative, ref = "During")
+
+# Relevel 
+data_ex$MV_YN <- relevel(data_ex$MV_YN, ref = "0")
+
+# Run the model
+model_tot <- glm.nb(`HOSPITAL LOS` ~ initiative + Age_Range + Month + PT_VISITS + `AVG THERAPY LENGTH` + MV_YN, data = data_ex, link = log)
+
+# Examine Model
+summary(model_tot)
+
+# Get confidence intervals
+pretty_print(confint(model_tot))
+
+# Check vifs
+pretty_print(vif(model_tot))
 ```
 
 
+0.1342426	0.2110153
+```{r}
+exp(0.2110153)
+```
+
+
+[Top of Tabset](#Total_LOS)
+
+## Interpretation 
+
+#### Main Effects
+QI-initiative time period was a significant predictor of total hospital length of stay, while controlling for age, admission month, mechanical ventilation, total physical therapy visits, and average therapy length. Compared to those in the Pre period, patients in the During period had a mean total hospital length of stay that was 0.83 times that of patients in the pre period (z = -5.27, 95% CI: [0.77,0.89], p < 0.0001), and patients in the Period had a mean total hospital length of stay that was 0.86 times that of patients in the Pre period (z = -7.10, 95% CI: [0.82,0.89], p < 0.0001). Those who were admitted in the During period did not have a significantly different total hospital length of stay compared to those enrolled in the Post period (z = 0.92, 95% CI: [0.96, 1.10], p = 0.36).
+
+#### Age
+Age range was a significant predictor of total hospital length of stay, while controlling for the other variables in the model. Specifically, patients who were 50-59 had 0.94 times (z = -2.16, 95% CI: [0.88, 0.99], p = 0.031), patients who were 60-69 had 0.94 times (z = -2.03, 95% CI: [0.89, 0.99], p = 0.043), and patients who were 70+ had 0.82 times the total hospital length of stay of patients who were 13-39 (z = -6.23, 95% CI: [0.77, 0.87], p = 0.0001). Patients who were 40-49 did not differ significantly from patients who were 13-39 (p = 0.37).
+
+# Admission Month
+Admission Month was a significant predictor for total hospital length of stay, while controlling for the other variables in the model. For instance, those admitted during May had an average total hospital length of stay that was 0.86 times that of those admitted during January (z = -3.19, 95% CI: [0.78, -0.0578866], p = 0.0014).
+
+Since possible comparisons between months are myriad (12!), and the goal of this project was not to compare outcome variables between months (merely to control for these differences due to seasonality), further comparisons will not be made.
+
+#### Number of Physical Therapy Visits 
+Total number of physical therapy visits was a significant predictor of total hospital length of stay, while controlling for the other variables in the model. On average, each 1 visit increase was associated with a 1.10 times increase in total hospital length stay (z = 19.37, 95% CI: [1.08, 1.11], p < 0.0001).
+
+#### Average Physical Therapy Length
+Average physical therapy length was a significant predictor of total hospital length of stay, while controlling for the other variables in the model. On average, each 1 minute increase in average physical therapy visit length was assocaited with a 1.004 times increase total hospital length of stay (z = 8.03, 95% CI: [1.003, 1.006], p < 0.0001).
+
+#### Reception of Mechanical Ventilation
+Reception of mechanical ventilation was a signicant predictor of total hospital length of stay. On average, patients who were mechanically ventilated had a mean total hospital length of stay that was 1.19 times greater than those who were not (z = 8.79, 95% CI: [1.14, 1.23], p < 0.0001).
+
+[Top of Tabset](#Total_LOS)
+
+## Visualization
+
+[Top of Tabset](#Total_LOS)
+
+## Summary
+
+[Top of Tabset](#Total_LOS)
+
+:::
 
 # Plotting
 
